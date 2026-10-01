@@ -2,39 +2,48 @@
 
 ## 1. C4 Container Диаграмма
 
-```mermaid
-flowchart TD
-    Client([Покупатели и Продавцы]) --> Gateway[API Gateway]
-    
-    subgraph Services [Микросервисы]
-        Gateway --> U[User Service]
-        Gateway --> C[Catalog Service]
-        Gateway --> O[Order Service]
-        Gateway --> F[Feed Service]
-        Gateway --> P[Payment Service]
-        Gateway -.-> N[Notification Service]
-    end
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+title C4 Container Diagram: Marketplace System
+Person(customer, "Pokupatel", "Ishet tovary, oformlyaet zakazy")
+Person(seller, "Prodavec", "Upravlyaet tovarami")
+System_Boundary(marketplace, "Marketplace System") {
+    Container(gateway, "API Gateway", "Nginx/Kong", "Routit zaprosy")
+    Container(user_svc, "User Service", "Python, FastAPI", "Profili i avtorizaciya")
+    ContainerDb(user_db, "User DB", "PostgreSQL", "Baza yuzerov")
+    Container(catalog_svc, "Catalog Service", "Python, FastAPI", "Katalog tovarov")
+    ContainerDb(catalog_db, "Catalog DB", "PostgreSQL", "Baza tovarov")
+    Container(order_svc, "Order Service", "Python, FastAPI", "Oformlenie zakazov")
+    ContainerDb(order_db, "Order DB", "PostgreSQL", "Baza zakazov")
+    Container(feed_svc, "Feed Service", "Python, FastAPI", "Lenta i poisk")
+    ContainerDb(feed_db, "Feed Cache", "Redis", "Kesh dlya bystrogo poiska")
+    Container(pay_svc, "Payment Service", "Python, FastAPI", "Oplaty")
+    ContainerDb(pay_db, "Payment DB", "PostgreSQL", "Tranzakcii")
+    Container(notif_svc, "Notification Service", "Python", "Otpravka pushey i pisem")
+    ContainerQueue(broker, "Message Broker", "RabbitMQ", "Shina sobytiy")
+}
 
-    subgraph Data_and_Infra [Базы данных и Брокер]
-        U --- U_DB[(User DB)]
-        C --- C_DB[(Catalog DB)]
-        O --- O_DB[(Order DB)]
-        F --- F_DB[(Feed Cache)]
-        P --- P_DB[(Payment DB)]
-        
-        Broker((Message Broker\nRabbitMQ))
-    end
+Rel(customer, gateway, "Zaprosy", "HTTPS")
+Rel(seller, gateway, "Zaprosy", "HTTPS")
+Rel(gateway, user_svc, "Routing", "REST")
+Rel(gateway, catalog_svc, "Routing", "REST")
+Rel(gateway, order_svc, "Routing", "REST")
+Rel(gateway, feed_svc, "Routing", "REST")
+Rel(gateway, pay_svc, "Routing", "REST")
+Rel(user_svc, user_db, "Chtenie/Zapis", "SQL")
+Rel(catalog_svc, catalog_db, "Chtenie/Zapis", "SQL")
+Rel(order_svc, order_db, "Chtenie/Zapis", "SQL")
+Rel(feed_svc, feed_db, "Chtenie/Zapis", "Redis CLI")
+Rel(pay_svc, pay_db, "Chtenie/Zapis", "SQL")
+Rel(catalog_svc, broker, "Sobytiya kataloga", "AMQP")
+Rel(order_svc, broker, "Sobytiya zakazov", "AMQP")
+Rel(pay_svc, broker, "Sobytiya oplat", "AMQP")
+Rel(broker, feed_svc, "Slushaet obnovleniya", "AMQP")
+Rel(broker, pay_svc, "Slushaet dlya spisaniya", "AMQP")
+Rel(broker, notif_svc, "Slushaet dlya uvedomleniy", "AMQP")
 
-    %% Асинхронные связи (публикация событий)
-    C -.->|События каталога| Broker
-    O -.->|События заказов| Broker
-    P -.->|События оплаты| Broker
-    
-    %% Подписки на брокер
-    Broker -.->|Слушает обновления| F
-    Broker -.->|Слушает статус для списания| P
-    Broker -.->|Слушает для рассылки| N
-```
+@enduml
 
 ## 2. Домены и распределение по сервисам
 
