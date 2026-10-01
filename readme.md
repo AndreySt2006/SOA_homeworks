@@ -1,8 +1,9 @@
 # Архитектура Маркетплейса (C4 + Service Initialization)
 
 ## 1. C4 Container Диаграмма
-
+```
 @startuml
+
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 LAYOUT_WITH_LEGEND()
 title C4 Container Diagram: Marketplace System
@@ -44,7 +45,7 @@ Rel(broker, pay_svc, "Slushaet dlya spisaniya", "AMQP")
 Rel(broker, notif_svc, "Slushaet dlya uvedomleniy", "AMQP")
 
 @enduml
-
+```
 ## 2. Домены и распределение по сервисам
 
 Логика разбиения простая — каждый домен отвечает за свою изолированную часть бизнеса и живет в своем микросервисе:
