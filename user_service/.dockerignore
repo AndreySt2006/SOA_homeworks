@@ -4,4 +4,4 @@ __pycache__/
 *.pyd
 .Python
 .venv/
-idea/
+.idea/
