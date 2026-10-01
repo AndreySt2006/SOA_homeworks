@@ -3,57 +3,37 @@
 ## 1. C4 Container Диаграмма
 
 ```mermaid
-C4Container
-    title C4 Container Диаграмма: Система Маркетплейса
+flowchart TD
+    Client([Покупатели и Продавцы]) --> Gateway[API Gateway]
+    
+    subgraph Services [Микросервисы]
+        Gateway --> U[User Service]
+        Gateway --> C[Catalog Service]
+        Gateway --> O[Order Service]
+        Gateway --> F[Feed Service]
+        Gateway --> P[Payment Service]
+        Gateway -.-> N[Notification Service]
+    end
 
-    Person(customer, "Покупатель", "Ищет товары, оформляет заказы")
-    Person(seller, "Продавец", "Управляет каталогом своих товаров")
-
-    System_Boundary(marketplace, "Marketplace System") {
-        Container(api_gateway, "API Gateway", "Nginx/Kong", "Единая точка входа, роутинг запросов")
+    subgraph Data_and_Infra [Базы данных и Брокер]
+        U --- U_DB[(User DB)]
+        C --- C_DB[(Catalog DB)]
+        O --- O_DB[(Order DB)]
+        F --- F_DB[(Feed Cache)]
+        P --- P_DB[(Payment DB)]
         
-        Container(user_service, "User Service", "Python, FastAPI", "Управление пользователями и аутентификация")
-        ContainerDb(user_db, "User DB", "PostgreSQL", "Хранит данные пользователей")
+        Broker((Message Broker\nRabbitMQ))
+    end
 
-        Container(catalog_service, "Catalog Service", "Python, FastAPI", "Управление товарами")
-        ContainerDb(catalog_db, "Catalog DB", "PostgreSQL", "Хранит товары и категории")
-
-        Container(feed_service, "Feed & Recs Service", "Python, FastAPI", "Персонализированная лента")
-        ContainerDb(feed_db, "Feed Cache", "Redis/Elasticsearch", "Кэш и индексы для быстрого поиска")
-
-        Container(order_service, "Order Service", "Python, FastAPI", "Оформление заказов")
-        ContainerDb(order_db, "Order DB", "PostgreSQL", "Хранит заказы")
-
-        Container(payment_service, "Payment Service", "Python, FastAPI", "Расчет и учет платежей")
-        ContainerDb(payment_db, "Payment DB", "PostgreSQL", "Транзакции и балансы")
-
-        Container(notification_service, "Notification Service", "Python", "Отправка email/push")
-        
-        ContainerQueue(message_broker, "Message Broker", "RabbitMQ / Kafka", "Асинхронное взаимодействие")
-    }
-
-    Rel(customer, api_gateway, "REST API", "HTTPS")
-    Rel(seller, api_gateway, "REST API", "HTTPS")
-
-    Rel(api_gateway, user_service, "Роутинг запросов")
-    Rel(api_gateway, catalog_service, "Роутинг запросов")
-    Rel(api_gateway, order_service, "Роутинг запросов")
-    Rel(api_gateway, feed_service, "Роутинг запросов")
-    Rel(api_gateway, payment_service, "Роутинг запросов")
-
-    Rel(user_service, user_db, "Чтение/Запись")
-    Rel(catalog_service, catalog_db, "Чтение/Запись")
-    Rel(order_service, order_db, "Чтение/Запись")
-    Rel(feed_service, feed_db, "Чтение/Запись")
-    Rel(payment_service, payment_db, "Чтение/Запись")
-
-    Rel(catalog_service, message_broker, "Публикует обновления товаров")
-    Rel(order_service, message_broker, "Публикует события 'Заказ создан'")
-    Rel(payment_service, message_broker, "Публикует события 'Оплата прошла'")
-
-    Rel(message_broker, feed_service, "Слушает обновления каталога")
-    Rel(message_broker, notification_service, "Слушает события для отправки уведомлений")
-    Rel(message_broker, payment_service, "Слушает события 'Заказ создан' для списания средств")
+    %% Асинхронные связи (публикация событий)
+    C -.->|События каталога| Broker
+    O -.->|События заказов| Broker
+    P -.->|События оплаты| Broker
+    
+    %% Подписки на брокер
+    Broker -.->|Слушает обновления| F
+    Broker -.->|Слушает статус для списания| P
+    Broker -.->|Слушает для рассылки| N
 ```
 
 ## 2. Домены и распределение по сервисам
