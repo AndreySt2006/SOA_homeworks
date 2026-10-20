@@ -1,11 +1,39 @@
 version: '3.8'
 
 services:
-  user_service:
-    build:
-      context: ./user_service
+  postgres:
+    image: postgres:15-alpine
+    container_name: mp_postgres
+    environment:
+      POSTGRES_USER: mp_user
+      POSTGRES_PASSWORD: mp_password
+      POSTGRES_DB: marketplace
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mp_user -d marketplace"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  flyway:
+    image: flyway/flyway:10-alpine
+    container_name: mp_flyway
+    command: -url=jdbc:postgresql://postgres:5432/marketplace -user=mp_user -password=mp_password -connectRetries=10 migrate
+    volumes:
+      - ./migrations:/flyway/sql
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    container_name: mp_api
+    environment:
+      DATABASE_URL: postgresql://mp_user:mp_password@postgres:5432/marketplace
+      JWT_SECRET: super-secret-key-2026
     ports:
       - "8000:8000"
-    restart: unless-stopped
-    environment:
-      - ENV=development
+    depends_on:
+      flyway:
+        condition: service_completed_successfully

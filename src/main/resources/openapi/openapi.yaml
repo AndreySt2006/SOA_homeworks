@@ -1,0 +1,606 @@
+openapi: 3.0.3
+info:
+  title: Marketplace API
+  version: 1.0.0
+  description: Контрактный API сервиса маркетплейса (CRUD, Заказы, Промокоды, JWT и Роли)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ProductStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE, ARCHIVED]
+
+    OrderStatus:
+      type: string
+      enum: [CREATED, PAYMENT_PENDING, PAID, SHIPPED, COMPLETED, CANCELED]
+
+    DiscountType:
+      type: string
+      enum: [PERCENTAGE, FIXED_AMOUNT]
+
+    UserRole:
+      type: string
+      enum: [USER, SELLER, ADMIN]
+
+    ErrorResponse:
+      type: object
+      required:
+        - error_code
+        - message
+      properties:
+        error_code:
+          type: string
+          example: PRODUCT_NOT_FOUND
+        message:
+          type: string
+          example: Товар с указанным ID не найден
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    RegisterRequest:
+      type: object
+      required: [username, password, role]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 100
+        password:
+          type: string
+          minLength: 6
+          maxLength: 100
+        role:
+          $ref: '#/components/schemas/UserRole'
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    TokenResponse:
+      type: object
+      required: [access_token, refresh_token, token_type]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+
+    ProductCreate:
+      type: object
+      required: [name, price, stock, category, status]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 4000
+          nullable: true
+        price:
+          type: number
+          format: double
+          minimum: 0.01
+        stock:
+          type: integer
+          minimum: 0
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+
+    ProductUpdate:
+      type: object
+      required: [name, price, stock, category, status]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 4000
+          nullable: true
+        price:
+          type: number
+          format: double
+          minimum: 0.01
+        stock:
+          type: integer
+          minimum: 0
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+
+    ProductResponse:
+      type: object
+      required: [id, name, price, stock, category, status, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        price:
+          type: number
+          format: double
+        stock:
+          type: integer
+        category:
+          type: string
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        seller_id:
+          type: integer
+          format: int64
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProductPageResponse:
+      type: object
+      required: [items, totalElements, page, size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductResponse'
+        totalElements:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+
+    PromoCodeCreate:
+      type: object
+      required: [code, discount_type, discount_value, min_order_amount, max_uses, valid_from, valid_until]
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Z0-9_]{4,20}$'
+        discount_type:
+          $ref: '#/components/schemas/DiscountType'
+        discount_value:
+          type: number
+          format: double
+          minimum: 0.01
+        min_order_amount:
+          type: number
+          format: double
+          minimum: 0
+        max_uses:
+          type: integer
+          minimum: 1
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+          default: true
+
+    PromoCodeResponse:
+      type: object
+      required: [id, code, discount_type, discount_value, min_order_amount, max_uses, current_uses, valid_from, valid_until, active]
+      properties:
+        id:
+          type: integer
+          format: int64
+        code:
+          type: string
+        discount_type:
+          $ref: '#/components/schemas/DiscountType'
+        discount_value:
+          type: number
+          format: double
+        min_order_amount:
+          type: number
+          format: double
+        max_uses:
+          type: integer
+        current_uses:
+          type: integer
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+
+    OrderItemRequest:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 999
+
+    OrderCreateRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/OrderItemRequest'
+        promo_code:
+          type: string
+          pattern: '^[A-Z0-9_]{4,20}$'
+          nullable: true
+
+    OrderUpdateRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/OrderItemRequest'
+
+    OrderItemResponse:
+      type: object
+      required: [id, product_id, quantity, price_at_order]
+      properties:
+        id:
+          type: integer
+          format: int64
+        product_id:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+        price_at_order:
+          type: number
+          format: double
+
+    OrderResponse:
+      type: object
+      required: [id, user_id, status, total_amount, discount_amount, items, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        promo_code_id:
+          type: integer
+          format: int64
+          nullable: true
+        total_amount:
+          type: number
+          format: double
+        discount_amount:
+          type: number
+          format: double
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItemResponse'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+paths:
+  /auth/register:
+    post:
+      summary: Регистрация пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Пользователь создан
+        '400':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      summary: Аутентификация
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Токены получены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+
+  /auth/refresh:
+    post:
+      summary: Обновление токена
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Новые токены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+
+  /products:
+    get:
+      summary: Список товаров с пагинацией и фильтрацией
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ProductStatus'
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список товаров
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPageResponse'
+    post:
+      summary: Создание товара
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreate'
+      responses:
+        '201':
+          description: Товар создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+
+  /products/{id}:
+    get:
+      summary: Получение товара по ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Товар найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '404':
+          description: Ошибка PRODUCT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Обновление товара
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdate'
+      responses:
+        '200':
+          description: Товар обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+    delete:
+      summary: Мягкое удаление товара (в ARCHIVED)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Товар переведен в архив
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+
+  /promo-codes:
+    post:
+      summary: Создание промокода
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoCodeCreate'
+      responses:
+        '201':
+          description: Промокод создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeResponse'
+
+  /orders:
+    post:
+      summary: Создание заказа
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+      responses:
+        '201':
+          description: Заказ создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+
+  /orders/{id}:
+    get:
+      summary: Получение заказа по ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required:
+          - id
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Заказ найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+    put:
+      summary: Обновление заказа
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderUpdateRequest'
+      responses:
+        '200':
+          description: Заказ обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+
+  /orders/{id}/cancel:
+    post:
+      summary: Отмена заказа
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Заказ отменен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
