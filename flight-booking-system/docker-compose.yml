@@ -1,0 +1,84 @@
+version: "3.8"
+
+services:
+  postgres-booking:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: booking
+      POSTGRES_PASSWORD: bookingpass
+      POSTGRES_DB: bookingdb
+    ports:
+      - "5433:5432"
+    volumes:
+      - booking_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking -d bookingdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-flight:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: flight
+      POSTGRES_PASSWORD: flightpass
+      POSTGRES_DB: flightdb
+    ports:
+      - "5434:5432"
+    volumes:
+      - flight_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flight -d flightdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --protected-mode no
+
+  flight-service:
+    build:
+      context: .
+      dockerfile: flight-service/Dockerfile
+    ports:
+      - "50051:50051"
+    environment:
+      DATABASE_URL: postgresql://flight:flightpass@postgres-flight:5432/flightdb
+      REDIS_SENTINEL_HOSTS: redis:6379
+      REDIS_MASTER_NAME: mymaster
+      GRPC_API_KEY: secret-flight-key-123
+    depends_on:
+      postgres-flight:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./proto:/proto
+
+  booking-service:
+    build:
+      context: .
+      dockerfile: booking-service/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://booking:bookingpass@postgres-booking:5432/bookingdb
+      FLIGHT_SERVICE_HOST: flight-service:50051
+      GRPC_API_KEY: secret-flight-key-123
+      # Circuit Breaker params
+      CB_FAILURE_THRESHOLD: 5
+      CB_RECOVERY_TIMEOUT: 30
+      CB_WINDOW_SIZE: 60
+    depends_on:
+      postgres-booking:
+        condition: service_healthy
+      flight-service:
+        condition: service_started
+
+volumes:
+  booking_data:
+  flight_data:
+  redis_master_data:
