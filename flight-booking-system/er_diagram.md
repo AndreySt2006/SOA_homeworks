@@ -17,7 +17,6 @@ erDiagram
         int available_seats "CHECK >= 0"
         float price "CHECK > 0"
         string status "SCHEDULED, DEPARTED, CANCELLED, COMPLETED"
-        unique flight_number_date "(flight_number, date(departure_time))"
     }
 
     SEAT_RESERVATION {
