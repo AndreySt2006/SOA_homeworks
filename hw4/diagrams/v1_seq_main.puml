@@ -1,0 +1,31 @@
+@startuml
+title Вариант 1. Основной сценарий: доставка через push
+actor "Клиент" as U
+participant "Сервис переводов" as P
+participant "Notification API" as API
+database "Redis" as R
+queue "Kafka" as K
+participant "Push Worker" as PW
+participant "FCM / APNs" as F
+participant "Timeout Checker" as TC
+participant "Callback API" as CB
+
+P -> API: POST /notifications (idempotency_key)
+API -> R: SET NX idempotency_key
+R --> API: OK (новый запрос)
+API -> R: настройки пользователя
+API -> K: tx.push (маршрут: push, sms, email)
+API --> P: 202 Accepted
+K -> PW: сообщение
+PW -> F: отправить push (TTL 15 с)
+F --> PW: принято
+PW -> K: tx.push.wait
+F -> U: push
+U -> CB: ack (notification_id)
+CB -> R: delivered:{id} = push
+... 15 секунд ...
+K -> TC: сообщение из tx.push.wait
+TC -> R: delivered:{id}?
+R --> TC: да
+TC -> K: delivery.events (DELIVERED, push)
+@enduml

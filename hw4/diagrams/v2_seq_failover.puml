@@ -1,0 +1,43 @@
+@startuml
+title Вариант 2. Failover: push не подтверждён, уходим в SMS
+actor "Клиент" as U
+participant "Delivery Orchestrator" as O
+database "PostgreSQL" as DB
+queue "Kafka" as K
+participant "Push Adapter" as PW
+participant "FCM / APNs" as F
+participant "SMS Adapter" as SW
+participant "SMS-провайдер" as S
+participant "Callback API" as CB
+
+O -> DB: INSERT попытка (push), deadline_at = now + 15 с
+O -> K: channel.push
+K -> PW: команда
+PW -> F: отправить push (TTL 15 с)
+F --> PW: принято
+PW -> K: delivery.results (SENT)
+note over U, F: устройство без сети, push не доставлен
+... 15 секунд, ack не пришёл ...
+O -> DB: выбрать просроченные (deadline_at < now)
+DB --> O: уведомление найдено
+O -> DB: попытка push = TIMEOUT
+O -> DB: INSERT попытка (sms), deadline_at = now + 60 с
+note right of DB: уникальность (уведомление, канал)\nзащищает от повторной отправки
+O -> K: channel.sms
+K -> SW: команда
+SW -> S: отправить SMS
+S --> SW: принято
+SW -> K: delivery.results (SENT)
+S -> U: SMS
+S -> CB: DLR (доставлено)
+CB -> K: delivery.results (ACK, sms)
+K -> O: подтверждение
+O -> DB: статус = DELIVERED (sms)
+
+opt основной SMS-провайдер вернул ошибку
+  SW -> S: повтор через резервного провайдера
+end
+opt DLR не пришёл за 60 с
+  O -> K: channel.email
+end
+@enduml

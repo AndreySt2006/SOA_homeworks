@@ -1,0 +1,47 @@
+@startuml
+!include <C4/C4_Container>
+title Вариант 2. Оркестрация: Delivery Orchestrator
+
+Person(user, "Клиент банка", "Получает уведомления")
+Person(support, "Поддержка", "Смотрит статус доставки")
+System_Ext(producers, "Сервисы банка", "Платежи, переводы, карты")
+System_Ext(push, "FCM / APNs", "Push-провайдеры")
+System_Ext(sms, "SMS-провайдеры", "Основной и резервный")
+System_Ext(email, "Email-провайдер", "SMTP")
+
+System_Boundary(np, "Notification Platform: критичный контур") {
+  Container(api, "Notification API", "Go, REST", "Принимает запрос, отдаёт статус")
+  ContainerQueue(kafka, "Kafka", "tx.notifications, channel.push, channel.sms, channel.email, delivery.results", "Команды и результаты")
+  Container(orch, "Delivery Orchestrator", "Go", "Машина состояний, выбор канала, тайм-ауты, failover, circuit breaker")
+  ContainerDb(pg, "PostgreSQL", "SQL, репликация", "Уведомления, попытки, сроки ожидания")
+  ContainerDb(redis, "Redis", "Key-value", "Кэш настроек пользователя и состояния провайдеров")
+  Container(pushw, "Push Adapter", "Go", "Отправляет push")
+  Container(smsw, "SMS Adapter", "Go", "Отправляет SMS, переключает провайдера")
+  Container(emailw, "Email Adapter", "Go", "Отправляет email")
+  Container(cb, "Callback API", "Go, REST", "Принимает ack от приложения и DLR от SMS-провайдера")
+}
+
+Rel(producers, api, "Отправить уведомление", "HTTPS")
+Rel(support, api, "Статус по идентификатору", "HTTPS")
+Rel(api, kafka, "tx.notifications")
+Rel(api, pg, "Читает статус")
+Rel(kafka, orch, "tx.notifications, delivery.results")
+Rel(orch, pg, "Состояние и попытки")
+Rel(orch, redis, "Настройки, состояние провайдеров")
+Rel(orch, kafka, "Команды в channel.*")
+Rel(kafka, pushw, "channel.push")
+Rel(kafka, smsw, "channel.sms")
+Rel(kafka, emailw, "channel.email")
+Rel(pushw, push, "Отправка", "HTTPS")
+Rel(smsw, sms, "Отправка", "HTTPS")
+Rel(emailw, email, "Отправка", "SMTP")
+Rel(pushw, kafka, "Результат в delivery.results")
+Rel(smsw, kafka, "Результат в delivery.results")
+Rel(emailw, kafka, "Результат в delivery.results")
+Rel(push, user, "Push")
+Rel(sms, user, "SMS")
+Rel(email, user, "Email")
+Rel(user, cb, "Ack от приложения", "HTTPS")
+Rel(sms, cb, "DLR", "HTTPS")
+Rel(cb, kafka, "Подтверждение в delivery.results")
+@enduml

@@ -1,0 +1,30 @@
+@startuml
+title Вариант 2. Основной сценарий: доставка через push
+actor "Клиент" as U
+participant "Сервис переводов" as P
+participant "Notification API" as API
+queue "Kafka" as K
+participant "Delivery Orchestrator" as O
+database "PostgreSQL" as DB
+participant "Push Adapter" as PW
+participant "FCM / APNs" as F
+participant "Callback API" as CB
+
+P -> API: POST /notifications (idempotency_key)
+API -> K: tx.notifications (acks=all)
+API --> P: 202 Accepted
+K -> O: новое уведомление
+O -> DB: INSERT уведомление (уникальный idempotency_key)
+O -> O: настройки из кэша, план: push, sms, email
+O -> DB: INSERT попытка (push), deadline_at = now + 15 с
+O -> K: channel.push
+K -> PW: команда
+PW -> F: отправить push (TTL 15 с)
+F --> PW: принято
+PW -> K: delivery.results (SENT)
+F -> U: push
+U -> CB: ack (notification_id)
+CB -> K: delivery.results (ACK, push)
+K -> O: подтверждение
+O -> DB: статус = DELIVERED (push)
+@enduml

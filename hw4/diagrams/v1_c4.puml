@@ -1,0 +1,46 @@
+@startuml
+!include <C4/C4_Container>
+title Вариант 1. Хореография: цепочка очередей
+
+Person(user, "Клиент банка", "Получает уведомления")
+System_Ext(producers, "Сервисы банка", "Платежи, переводы, карты")
+System_Ext(push, "FCM / APNs", "Push-провайдеры")
+System_Ext(sms, "SMS-провайдеры", "Основной и резервный")
+System_Ext(email, "Email-провайдер", "SMTP")
+
+System_Boundary(np, "Notification Platform: критичный контур") {
+  Container(api, "Notification API", "Go, REST", "Принимает запрос, проверяет ключ идемпотентности, строит маршрут каналов")
+  ContainerQueue(kafka, "Kafka", "tx.push, tx.sms, tx.email, *.wait, delivery.events", "Очереди по каналам")
+  Container(pushw, "Push Worker", "Go", "Отправляет push")
+  Container(smsw, "SMS Worker", "Go", "Отправляет SMS")
+  Container(emailw, "Email Worker", "Go", "Отправляет email")
+  Container(checker, "Timeout Checker", "Go", "После тайм-аута проверяет подтверждение и перекладывает в следующий канал")
+  Container(cb, "Callback API", "Go, REST", "Принимает ack от приложения и DLR от SMS-провайдера")
+  ContainerDb(redis, "Redis", "Key-value", "Ключи идемпотентности, отметки о доставке, кэш настроек")
+  Container(status, "Status Service", "Go", "Собирает события доставки")
+  ContainerDb(pg, "PostgreSQL", "SQL", "История статусов")
+}
+
+Rel(producers, api, "Отправить уведомление", "HTTPS")
+Rel(api, redis, "Идемпотентность, настройки")
+Rel(api, kafka, "Публикует в первый канал")
+Rel(kafka, pushw, "tx.push")
+Rel(kafka, smsw, "tx.sms")
+Rel(kafka, emailw, "tx.email")
+Rel(pushw, push, "Отправка", "HTTPS")
+Rel(smsw, sms, "Отправка", "HTTPS")
+Rel(emailw, email, "Отправка", "SMTP")
+Rel(pushw, kafka, "Ошибка: в tx.sms; успех: в tx.push.wait")
+Rel(smsw, kafka, "Ошибка: в tx.email; успех: в tx.sms.wait")
+Rel(kafka, checker, "*.wait")
+Rel(checker, redis, "Есть подтверждение?")
+Rel(checker, kafka, "Нет: в следующий канал")
+Rel(push, user, "Push")
+Rel(sms, user, "SMS")
+Rel(email, user, "Email")
+Rel(user, cb, "Ack от приложения", "HTTPS")
+Rel(sms, cb, "DLR", "HTTPS")
+Rel(cb, redis, "Отметка о доставке")
+Rel(kafka, status, "delivery.events")
+Rel(status, pg, "Сохраняет")
+@enduml

@@ -1,0 +1,37 @@
+@startuml
+title Вариант 1. Failover: push не подтверждён, уходим в SMS
+actor "Клиент" as U
+queue "Kafka" as K
+participant "Push Worker" as PW
+participant "FCM / APNs" as F
+participant "Timeout Checker" as TC
+database "Redis" as R
+participant "SMS Worker" as SW
+participant "SMS-провайдер" as S
+participant "Callback API" as CB
+
+K -> PW: сообщение из tx.push
+PW -> F: отправить push (TTL 15 с)
+F --> PW: принято
+PW -> K: tx.push.wait
+note over U, F: устройство без сети, push не доставлен
+... 15 секунд ...
+K -> TC: сообщение из tx.push.wait
+TC -> R: delivered:{id}?
+R --> TC: нет
+TC -> K: tx.sms
+K -> SW: сообщение
+SW -> R: SET NX sent:{id}:sms
+R --> SW: OK (ещё не отправляли)
+SW -> S: отправить SMS
+S --> SW: принято
+SW -> K: tx.sms.wait
+S -> U: SMS
+S -> CB: DLR (доставлено)
+CB -> R: delivered:{id} = sms
+... 60 секунд ...
+K -> TC: сообщение из tx.sms.wait
+TC -> R: delivered:{id}?
+R --> TC: да
+TC -> K: delivery.events (DELIVERED, sms)
+@enduml
